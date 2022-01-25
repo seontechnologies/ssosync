@@ -5,6 +5,10 @@ package config
 type Config struct {
 	// Verbose toggles the verbosity
 	Debug bool
+	// Dry run
+	DryRun bool
+	// Max Retries
+	MaxRetries int
 	// LogLevel is the level with with to log for this config
 	LogLevel string `mapstructure:"log_level"`
 	// LogFormat is the format that is used for logging
@@ -40,6 +44,10 @@ const (
 	DefaultLogFormat = "text"
 	// DefaultDebug is the default debug status.
 	DefaultDebug = false
+	// DefaultDryRun is the default dry run status.
+	DefaultDryRun = false
+	// DefaultMaxRetries is the default max retries value.
+	DefaultMaxRetries = 1
 	// DefaultGoogleCredentials is the default credentials path
 	DefaultGoogleCredentials = "credentials.json"
 	// DefaultSyncMethod is the default sync method to use.
@@ -50,6 +58,8 @@ const (
 func New() *Config {
 	return &Config{
 		Debug:             DefaultDebug,
+		DryRun:            DefaultDryRun,
+		MaxRetries:        DefaultMaxRetries,
 		LogLevel:          DefaultLogLevel,
 		LogFormat:         DefaultLogFormat,
 		SyncMethod:        DefaultSyncMethod,
