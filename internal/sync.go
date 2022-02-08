@@ -17,8 +17,10 @@ package internal
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io/ioutil"
+	"strings"
 	"time"
 
 	"github.com/awslabs/ssosync/internal/aws"
@@ -372,17 +374,86 @@ func (s *syncGSuite) SyncGroupsUsers(query string) error {
 		return err
 	}
 
+	//bug: AWS SCIM gives back max 50 groups (ListGroups) and users (ListUsers)
 	log.Info("get existing aws groups")
-	awsGroups, err := s.aws.GetGroups()
-	if err != nil {
-		log.Error("error getting aws groups")
-		return err
-	}
+	awsGroups := []*aws.Group{}
+	awsUsers := []*aws.User{}
+	var s3Store *aws.S3Store
 
-	log.Info("get existing aws users")
-	awsUsers, err := s.aws.GetUsers()
-	if err != nil {
-		return err
+	S3Bucket := strings.Split(s.cfg.S3StatePath, "/")[0]
+	S3ObjectKeyPrefix := strings.Split(s.cfg.S3StatePath, "/")[1:]
+	S3ObjectKeyUsers := strings.Join(append(S3ObjectKeyPrefix, "aws_users.json"), "/")
+	S3ObjectKeyGroups := strings.Join(append(S3ObjectKeyPrefix, "aws_groups.json"), "/")
+
+	if s.cfg.S3StatePath == "" {
+		awsGroups, err = s.aws.GetGroups()
+		if err != nil {
+			log.Error("error getting aws groups")
+			return err
+		}
+
+		awsUsers, err = s.aws.GetUsers()
+		if err != nil {
+			log.Error("error getting aws users")
+			return err
+		}
+	} else {
+		s3Store, err = aws.NewS3Store(S3Bucket)
+		if err != nil {
+			return err
+		}
+
+		groupJSON, err := s3Store.Download(S3ObjectKeyGroups)
+		if err != nil {
+			for _, gGroup := range googleGroups {
+				newAWSGroup := aws.NewGroup(gGroup.Name)
+				awsGroups = append(awsGroups, newAWSGroup)
+			}
+		} else {
+			err = json.Unmarshal(groupJSON, &awsGroups)
+			if err != nil {
+				log.Error("error unmarshal json file")
+				return err
+			}
+		}
+
+		tmpGroup := awsGroups[:0]
+		for _, awsGroup := range awsGroups {
+			awsGroupFull, err := s.aws.FindGroupByDisplayName(awsGroup.DisplayName)
+			if err != nil && err != aws.ErrGroupNotFound {
+				return err
+			} else if err == nil {
+				tmpGroup = append(tmpGroup, awsGroupFull)
+			}
+		}
+		awsGroups = tmpGroup
+
+		log.Info("get existing aws users")
+
+		userJSON, err := s3Store.Download(S3ObjectKeyUsers)
+		if err != nil {
+			for _, gUser := range googleUsers {
+				newAWSUser := aws.NewUser(gUser.Name.GivenName, gUser.Name.FamilyName, gUser.PrimaryEmail, !gUser.Suspended)
+				awsUsers = append(awsUsers, newAWSUser)
+			}
+		} else {
+			err = json.Unmarshal(userJSON, &awsUsers)
+			if err != nil {
+				log.Error("error unmarshal json file")
+				return err
+			}
+		}
+
+		tmpUser := awsUsers[:0]
+		for _, awsUser := range awsUsers {
+			awsUserFull, err := s.aws.FindUserByEmail(awsUser.Username)
+			if err != nil && err != aws.ErrUserNotFound {
+				return err
+			} else if err == nil {
+				tmpUser = append(tmpUser, awsUserFull)
+			}
+		}
+		awsUsers = tmpUser
 	}
 
 	log.Debug("preparing list of aws groups and their members")
@@ -392,8 +463,25 @@ func (s *syncGSuite) SyncGroupsUsers(query string) error {
 	}
 
 	// create list of changes by operations
-	addAWSUsers, delAWSUsers, updateAWSUsers, _ := getUserOperations(awsUsers, googleUsers)
+	addAWSUsers, delAWSUsers, updateAWSUsers, equalAWSUsers := getUserOperations(awsUsers, googleUsers)
+
 	addAWSGroups, delAWSGroups, equalAWSGroups := getGroupOperations(awsGroups, googleGroups)
+
+	if s.cfg.S3StatePath != "" && !s.cfg.DryRun {
+		fileUser, _ := json.MarshalIndent(append(addAWSUsers, append(delAWSUsers, append(updateAWSUsers, equalAWSUsers...)...)...), "", " ")
+
+		err = s3Store.Upload(S3ObjectKeyUsers, fileUser)
+		if err != nil {
+			return err
+		}
+
+		fileGroup, _ := json.MarshalIndent(append(addAWSGroups, append(delAWSGroups, equalAWSGroups...)...), "", " ")
+
+		err = s3Store.Upload(S3ObjectKeyGroups, fileGroup)
+		if err != nil {
+			return err
+		}
+	}
 
 	log.Info("syncing changes")
 	// delete aws users (deleted in google)
@@ -512,15 +600,33 @@ func (s *syncGSuite) SyncGroupsUsers(query string) error {
 
 		for _, googleUser := range googleGroupsUsers[awsGroup.DisplayName] {
 
-			log.WithField("user", googleUser.PrimaryEmail).Debug("finding user")
-			awsUserFull, err := s.aws.FindUserByEmail(googleUser.PrimaryEmail)
+			logEntry := log.WithField("user", googleUser.PrimaryEmail)
+			logEntry.Debug("finding user")
+			awsUserFull := aws.NewUser(
+				googleUser.Name.GivenName,
+				googleUser.Name.FamilyName,
+				googleUser.PrimaryEmail,
+				!googleUser.Suspended)
+			var err error
+			err = s.Run(logEntry, "finding user", func() (e error) {
+				return s.Retry(logEntry, func() (e error) {
+					awsUserFull, e = s.aws.FindUserByEmail(googleUser.PrimaryEmail)
+					return e
+				})
+			})
 			if err != nil {
 				return err
 			}
 
-			logEntry := log.WithField("user", awsUserFull.Username)
+			logEntry = log.WithField("user", awsUserFull.Username)
 			logEntry.Debug("checking user is in group already")
-			b, err := s.aws.IsUserInGroup(awsUserFull, awsGroup)
+			var b bool
+			err = s.Run(logEntry, "checking user is in group already", func() (e error) {
+				return s.Retry(logEntry, func() (e error) {
+					b, e = s.aws.IsUserInGroup(awsUserFull, awsGroup)
+					return e
+				})
+			})
 			if err != nil {
 				return err
 			}
