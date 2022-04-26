@@ -880,7 +880,7 @@ func DoSync(ctx context.Context, cfg *config.Config) error {
 
 	creds := []byte(cfg.GoogleCredentials)
 
-	if !cfg.IsLambda {
+	if (!cfg.IsLambda) && (cfg.SecretID == "") {
 		b, err := ioutil.ReadFile(cfg.GoogleCredentials)
 		if err != nil {
 			return err

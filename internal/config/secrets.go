@@ -3,19 +3,22 @@ package config
 import (
 	"encoding/base64"
 
+	"encoding/json"
 	"github.com/aws/aws-sdk-go/aws"
 	"github.com/aws/aws-sdk-go/service/secretsmanager"
 )
 
 // Secrets ...
 type Secrets struct {
-	svc *secretsmanager.SecretsManager
+	svc      *secretsmanager.SecretsManager
+	secretID string
 }
 
 // NewSecrets ...
-func NewSecrets(svc *secretsmanager.SecretsManager) *Secrets {
+func NewSecrets(svc *secretsmanager.SecretsManager, secretID string) *Secrets {
 	return &Secrets{
-		svc: svc,
+		svc:      svc,
+		secretID: secretID,
 	}
 }
 
@@ -41,7 +44,7 @@ func (s *Secrets) GoogleCredentials() (string, error) {
 
 func (s *Secrets) getSecret(secretKey string) (string, error) {
 	r, err := s.svc.GetSecretValue(&secretsmanager.GetSecretValueInput{
-		SecretId:     aws.String(secretKey),
+		SecretId:     aws.String(s.secretID),
 		VersionStage: aws.String("AWSCURRENT"),
 	})
 
@@ -50,6 +53,7 @@ func (s *Secrets) getSecret(secretKey string) (string, error) {
 	}
 
 	var secretString string
+	var secret map[string]string
 
 	if r.SecretString != nil {
 		secretString = *r.SecretString
@@ -62,5 +66,14 @@ func (s *Secrets) getSecret(secretKey string) (string, error) {
 		secretString = string(decodedBinarySecretBytes[:l])
 	}
 
-	return secretString, nil
+	if err := json.Unmarshal([]byte(secretString), &secret); err != nil {
+		return "", err
+	}
+
+	if v, ok := secret[secretKey]; ok {
+		return v, nil
+	} else {
+		return "", err
+	}
+
 }
