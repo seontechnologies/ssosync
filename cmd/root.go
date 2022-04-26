@@ -160,6 +160,7 @@ func configLambda() {
 }
 
 func addFlags(cmd *cobra.Command, cfg *config.Config) {
+	rootCmd.PersistentFlags().StringVarP(&cfg.S3StatePath, "s3-state-path", "", config.DefaultS3StatePath, "store AWS SCIM state in s3, [bucket name]/[state object key prefix], set AWS_PROFILE and AWS_REGION env variable")
 	rootCmd.PersistentFlags().StringVarP(&cfg.GoogleCredentials, "google-admin", "a", config.DefaultGoogleCredentials, "path to find credentials file for Google Workspace")
 	rootCmd.PersistentFlags().BoolVarP(&cfg.Debug, "debug", "d", config.DefaultDebug, "enable verbose / debug logging")
 	rootCmd.PersistentFlags().BoolVarP(&cfg.DryRun, "dry-run", "", config.DefaultDryRun, "dry run")

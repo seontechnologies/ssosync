@@ -3,6 +3,8 @@ package config
 
 // Config ...
 type Config struct {
+	// Store AWS SCIM state in S3
+	S3StatePath string
 	// Verbose toggles the verbosity
 	Debug bool
 	// Dry run
@@ -38,6 +40,8 @@ type Config struct {
 }
 
 const (
+	// Default S3 State Path
+	DefaultS3StatePath = ""
 	// DefaultLogLevel is the default logging level.
 	DefaultLogLevel = "info"
 	// DefaultLogFormat is the default format of the logger
@@ -57,6 +61,7 @@ const (
 // New returns a new Config
 func New() *Config {
 	return &Config{
+		S3StatePath:       DefaultS3StatePath,
 		Debug:             DefaultDebug,
 		DryRun:            DefaultDryRun,
 		MaxRetries:        DefaultMaxRetries,
