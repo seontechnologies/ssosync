@@ -65,7 +65,7 @@ Complete documentation is available at https://github.com/awslabs/ssosync`,
 // running inside of AWS Lambda, we use the Lambda
 // execution path.
 func Execute() {
-	if cfg.IsLambda {
+	if cfg.IsLambda && cfg.SecretID != "" {
 		lambda.Start(rootCmd.Execute)
 	}
 
@@ -97,6 +97,10 @@ func initConfig() {
 	viper.AutomaticEnv()
 
 	appEnvVars := []string{
+		"s3_state_path",
+		"secret_id",
+		"dry_run",
+		"debug",
 		"google_admin",
 		"google_credentials",
 		"scim_access_token",
@@ -124,7 +128,7 @@ func initConfig() {
 	// config logger
 	logConfig(cfg)
 
-	if cfg.IsLambda {
+	if cfg.IsLambda || cfg.SecretID != "" {
 		configLambda()
 	}
 }
@@ -132,7 +136,7 @@ func initConfig() {
 func configLambda() {
 	s := session.Must(session.NewSession())
 	svc := secretsmanager.New(s)
-	secrets := config.NewSecrets(svc)
+	secrets := config.NewSecrets(svc, cfg.SecretID)
 
 	unwrap, err := secrets.GoogleAdminEmail()
 	if err != nil {
@@ -160,13 +164,14 @@ func configLambda() {
 }
 
 func addFlags(cmd *cobra.Command, cfg *config.Config) {
-	rootCmd.PersistentFlags().StringVarP(&cfg.S3StatePath, "s3-state-path", "", config.DefaultS3StatePath, "store AWS SCIM state in s3, [bucket name]/[state object key prefix], set AWS_PROFILE and AWS_REGION env variable")
+	rootCmd.PersistentFlags().StringVar(&cfg.S3StatePath, "s3-state-path", config.DefaultS3StatePath, "store AWS SCIM state in s3, [bucket name]/[state object key prefix], set AWS_PROFILE and AWS_REGION env variable")
 	rootCmd.PersistentFlags().StringVarP(&cfg.GoogleCredentials, "google-admin", "a", config.DefaultGoogleCredentials, "path to find credentials file for Google Workspace")
 	rootCmd.PersistentFlags().BoolVarP(&cfg.Debug, "debug", "d", config.DefaultDebug, "enable verbose / debug logging")
-	rootCmd.PersistentFlags().BoolVarP(&cfg.DryRun, "dry-run", "", config.DefaultDryRun, "dry run")
+	rootCmd.PersistentFlags().BoolVar(&cfg.DryRun, "dry-run", config.DefaultDryRun, "dry run")
 	rootCmd.PersistentFlags().IntVarP(&cfg.MaxRetries, "max-retries", "x", config.DefaultMaxRetries, "max retries")
-	rootCmd.PersistentFlags().StringVarP(&cfg.LogFormat, "log-format", "", config.DefaultLogFormat, "log format")
-	rootCmd.PersistentFlags().StringVarP(&cfg.LogLevel, "log-level", "", config.DefaultLogLevel, "log level")
+	rootCmd.PersistentFlags().StringVar(&cfg.LogFormat, "log-format", config.DefaultLogFormat, "log format")
+	rootCmd.PersistentFlags().StringVar(&cfg.LogLevel, "log-level", config.DefaultLogLevel, "log level")
+	rootCmd.Flags().StringVar(&cfg.SecretID, "secret-id", "", "secretsmanager secret id which stores sensitive data at lambda execution")
 	rootCmd.Flags().StringVarP(&cfg.SCIMAccessToken, "access-token", "t", "", "AWS SSO SCIM API Access Token")
 	rootCmd.Flags().StringVarP(&cfg.SCIMEndpoint, "endpoint", "e", "", "AWS SSO SCIM API Endpoint")
 	rootCmd.Flags().StringVarP(&cfg.GoogleCredentials, "google-credentials", "c", config.DefaultGoogleCredentials, "path to Google Workspace credentials file")

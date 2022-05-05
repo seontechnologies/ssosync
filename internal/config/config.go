@@ -4,11 +4,13 @@ package config
 // Config ...
 type Config struct {
 	// Store AWS SCIM state in S3
-	S3StatePath string
+	S3StatePath string `mapstructure:"s3_state_path"`
+	// Secretsmanager secret id
+	SecretID string `mapstructure:"secret_id"`
 	// Verbose toggles the verbosity
 	Debug bool
 	// Dry run
-	DryRun bool
+	DryRun bool `mapstructure:"dry_run"`
 	// Max Retries
 	MaxRetries int
 	// LogLevel is the level with with to log for this config
@@ -42,6 +44,8 @@ type Config struct {
 const (
 	// Default S3 State Path
 	DefaultS3StatePath = ""
+	// Default Secret ID
+	DefaultSecretID = ""
 	// DefaultLogLevel is the default logging level.
 	DefaultLogLevel = "info"
 	// DefaultLogFormat is the default format of the logger
@@ -62,6 +66,7 @@ const (
 func New() *Config {
 	return &Config{
 		S3StatePath:       DefaultS3StatePath,
+		SecretID:          DefaultSecretID,
 		Debug:             DefaultDebug,
 		DryRun:            DefaultDryRun,
 		MaxRetries:        DefaultMaxRetries,
