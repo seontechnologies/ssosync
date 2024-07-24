@@ -43,10 +43,11 @@ func NewUser(firstName string, lastName string, email string, active bool) *User
 			FamilyName: lastName,
 			GivenName:  firstName,
 		},
-		DisplayName: strings.Join([]string{firstName, lastName}, " "),
-		Active:      active,
-		Emails:      e,
-		Addresses:   a,
+		DisplayName:   strings.Join([]string{firstName, lastName}, " "),
+		RedisUsername: strings.ReplaceAll(firstName, " ", "") + lastName,
+		Active:        active,
+		Emails:        e,
+		Addresses:     a,
 	}
 }
 
@@ -76,9 +77,10 @@ func UpdateUser(id string, firstName string, lastName string, email string, acti
 			FamilyName: lastName,
 			GivenName:  firstName,
 		},
-		DisplayName: strings.Join([]string{firstName, lastName}, " "),
-		Active:      active,
-		Emails:      e,
-		Addresses:   a,
+		DisplayName:   strings.Join([]string{firstName, lastName}, " "),
+		RedisUsername: strings.ReplaceAll(firstName, " ", "") + lastName,
+		Active:        active,
+		Emails:        e,
+		Addresses:     a,
 	}
 }
